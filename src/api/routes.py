@@ -1,11 +1,14 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
+from uuid import UUID
 
 from src.config.database import get_db
 from src.config.cache import cache_manager
 from src.services.subject_generator import SubjectGeneratorService
+from src.services.ab_testing import MultiArmedBanditService
+from src.services.analytics import AnalyticsService
 from src.models.ab_testing import ABTest, TestVariation, EmailEvent
 from src.api.models import (
     GenerateRequest, GenerateResponse, SubjectVariation,
@@ -163,3 +166,125 @@ async def get_test_analytics(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analytics retrieval failed: {str(e)}")
+
+@router.get("/select/{ab_test_id}")
+async def select_variation(
+    ab_test_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Select the best variation using multi-armed bandit algorithm"""
+    try:
+        test_uuid = UUID(ab_test_id)
+        bandit_service = MultiArmedBanditService(db)
+        result = await bandit_service.select_variation(test_uuid)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Test not found or not active")
+        
+        return result
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Variation selection failed: {str(e)}")
+
+@router.post("/record-event/{variation_id}")
+async def record_event(
+    variation_id: str,
+    event_type: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Record an event for a variation"""
+    try:
+        variation_uuid = UUID(variation_id)
+        bandit_service = MultiArmedBanditService(db)
+        success = await bandit_service.record_event(
+            variation_uuid,
+            event_type,
+            metadata={}
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Variation not found")
+        
+        return {"success": True, "message": f"Event {event_type} recorded"}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Event recording failed: {str(e)}")
+
+@router.get("/analytics/top-subjects")
+async def get_top_subjects(
+    limit: int = Query(10, ge=1, le=100),
+    days: int = Query(30, ge=1, le=365),
+    min_sends: int = Query(100, ge=1),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get top performing subject lines"""
+    try:
+        analytics_service = AnalyticsService(db)
+        results = await analytics_service.get_top_performing_subjects(
+            limit=limit,
+            days=days,
+            min_sends=min_sends
+        )
+        return {"top_subjects": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve top subjects: {str(e)}")
+
+@router.get("/analytics/dashboard")
+async def get_dashboard_metrics(db: AsyncSession = Depends(get_db)):
+    """Get comprehensive dashboard metrics"""
+    try:
+        analytics_service = AnalyticsService(db)
+        metrics = await analytics_service.get_dashboard_metrics()
+        return metrics
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve dashboard metrics: {str(e)}")
+
+@router.get("/analytics/variation/{variation_id}")
+async def get_variation_performance(
+    variation_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get detailed performance metrics for a specific variation"""
+    try:
+        variation_uuid = UUID(variation_id)
+        analytics_service = AnalyticsService(db)
+        result = await analytics_service.get_variation_performance(variation_uuid)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Variation not found")
+        
+        return result
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve variation performance: {str(e)}")
+
+@router.get("/analytics/test-comparison/{ab_test_id}")
+async def get_test_comparison(
+    ab_test_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get comparative analysis of all variations in a test"""
+    try:
+        test_uuid = UUID(ab_test_id)
+        analytics_service = AnalyticsService(db)
+        result = await analytics_service.get_test_comparison(test_uuid)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Test not found")
+        
+        return result
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve test comparison: {str(e)}")

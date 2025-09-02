@@ -32,9 +32,7 @@ class SubjectGeneratorService:
         email_content: str, 
         original_subject: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Generate 5 subject line variations with caching and A/B test tracking
-        """
+        """Generate 5 subject line variations with proper UUID support."""
         # Check cache first
         cache_key = email_content
         cached_result = await cache_manager.get(cache_key)
@@ -49,47 +47,45 @@ class SubjectGeneratorService:
         # Generate new variations
         subject_lines = await self.ai_provider.generate_subject_lines(email_content, original_subject)
         
-        # Create A/B test record
+        # Create A/B test record with UUID
         async with AsyncSessionLocal() as session:
+            ab_test_id = uuid.uuid4()
             ab_test = ABTest(
-                id=cache_manager._generate_cache_key(email_content),
+                id=ab_test_id,
                 email_content_hash=cache_manager._generate_cache_key(email_content),
-                original_subject=original_subject
+                original_subject=original_subject,
+                name=f"Test for: {original_subject or 'Untitled'}"[:255],
+                status="active"
             )
             session.add(ab_test)
             
             # Create variations
             variations = []
-            variation_objects = []
             for i, subject_line in enumerate(subject_lines):
                 variation = TestVariation(
-                    id=str(uuid.uuid4()),
-                    ab_test_id=ab_test.id,
+                    id=uuid.uuid4(),
+                    ab_test_id=ab_test_id,
                     subject_line=subject_line,
                     variation_index=i
                 )
                 session.add(variation)
-                variation_objects.append(variation)
-            
-            await session.commit()
-            
-            # Build response after commit to get IDs
-            for variation in variation_objects:
                 variations.append({
                     "id": str(variation.id),
                     "subject_line": variation.subject_line,
                     "variation_index": variation.variation_index
                 })
+            
+            await session.commit()
         
-        # Cache the result
+        # Cache and return result
         result = {
-            "ab_test_id": ab_test.id,
+            "ab_test_id": str(ab_test_id),
             "variations": variations,
             "cached": False
         }
         
         await cache_manager.set(cache_key, {
-            "ab_test_id": ab_test.id,
+            "ab_test_id": str(ab_test_id),
             "variations": variations
         }, ttl=3600)
         
