@@ -1,14 +1,18 @@
 import asyncio
 import os
+import uuid
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from dotenv import load_dotenv
 
 from src.config.cache import cache_manager
 from src.config.database import AsyncSessionLocal
 from src.models.ab_testing import ABTest, TestVariation
 from src.services.ai_providers import OpenAIProvider, RateLimitConfig
+
+load_dotenv()
 
 class SubjectGeneratorService:
     def __init__(self):
@@ -56,20 +60,26 @@ class SubjectGeneratorService:
             
             # Create variations
             variations = []
+            variation_objects = []
             for i, subject_line in enumerate(subject_lines):
                 variation = TestVariation(
+                    id=str(uuid.uuid4()),
                     ab_test_id=ab_test.id,
                     subject_line=subject_line,
                     variation_index=i
                 )
                 session.add(variation)
-                variations.append({
-                    "id": str(variation.id),
-                    "subject_line": subject_line,
-                    "variation_index": i
-                })
+                variation_objects.append(variation)
             
             await session.commit()
+            
+            # Build response after commit to get IDs
+            for variation in variation_objects:
+                variations.append({
+                    "id": str(variation.id),
+                    "subject_line": variation.subject_line,
+                    "variation_index": variation.variation_index
+                })
         
         # Cache the result
         result = {

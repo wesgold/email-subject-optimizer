@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import String, Integer, Float, DateTime, Text, Boolean, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
 class Base(DeclarativeBase):
@@ -23,7 +22,7 @@ class ABTest(Base):
 class TestVariation(Base):
     __tablename__ = "test_variations"
     
-    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     ab_test_id: Mapped[str] = mapped_column(String(64), ForeignKey("ab_tests.id"))
     subject_line: Mapped[str] = mapped_column(String(255), nullable=False)
     variation_index: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-4
@@ -42,8 +41,8 @@ class TestVariation(Base):
 class EmailEvent(Base):
     __tablename__ = "email_events"
     
-    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    variation_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("test_variations.id"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    variation_id: Mapped[str] = mapped_column(String(36), ForeignKey("test_variations.id"))
     event_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'sent', 'opened', 'clicked'
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
