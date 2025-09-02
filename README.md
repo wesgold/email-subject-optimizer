@@ -3,16 +3,18 @@
 An intelligent system for generating and optimizing email subject lines using AI, with built-in A/B testing and analytics.
 
 ## Project Structure
+```
 email-subject-optimizer/
-+-- .claude/           # Claude command files for planning & development
-+-- docs/
-�   +-- tickets/       # Project tickets and requirements
-�   +-- plans/         # Implementation plans
-�   +-- research/      # Research documents
-+-- src/               # Source code
-+-- tests/             # Test files
-+-- data/              # Data storage (cache, A/B results)
-+-- config/            # Configuration files
+├── .claude/           # Claude command files for planning & development
+├── docs/
+│   ├── tickets/       # Project tickets and requirements
+│   ├── plans/         # Implementation plans
+│   └── research/      # Research documents
+├── src/               # Source code
+├── tests/             # Test files
+├── data/              # Data storage (cache, A/B results)
+└── config/            # Configuration files
+```
 
 ## Core Features
 
